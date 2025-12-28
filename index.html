@@ -1,0 +1,895 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <meta name="theme-color" content="#050505">
+    <meta name="description" content="方舟 - THE SILENT VIGIL - 一場關於守望與約定的互動故事">
+    <title>方舟 - THE SILENT VIGIL</title>
+    
+    <!-- Preconnect for performance -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link rel="preconnect" href="https://cdn.tailwindcss.com">
+    
+    <!-- Fonts -->
+    <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;700;900&family=Cinzel:wght@400;700&display=swap" rel="stylesheet">
+    
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    
+    <!-- Lucide Icons -->
+    <script src="https://unpkg.com/lucide@latest"></script>
+    
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    fontFamily: { 
+                        serif: ['Cinzel', 'serif'], 
+                        sc: ['Noto Serif SC', 'serif'] 
+                    },
+                    animation: { 
+                        'fade-in-up': 'fadeInUp 0.8s ease-out forwards',
+                        'ping-once': 'pingOnce 0.6s cubic-bezier(0, 0, 0.2, 1) forwards',
+                    },
+                    keyframes: { 
+                        fadeInUp: { 
+                            '0%': { opacity: '0', transform: 'translateY(20px)' }, 
+                            '100%': { opacity: '1', transform: 'translateY(0)' } 
+                        },
+                        pingOnce: { 
+                            '0%': { transform: 'scale(0)', opacity: '0.8' }, 
+                            '100%': { transform: 'scale(2.5)', opacity: '0' } 
+                        },
+                    }
+                }
+            }
+        }
+    </script>
+
+<style>
+    /* 1. 基礎設定與效能優化 */
+    * { -webkit-tap-highlight-color: transparent; }
+    body { 
+        background-color: #050505; color: #e5e5e5; overflow-x: hidden; overflow-y: auto;
+        font-family: 'Noto Serif SC', serif; -webkit-font-smoothing: antialiased;
+    }
+    button, .tarot-card { user-select: none; -webkit-user-select: none; }
+    .text-glow { text-shadow: 0 0 15px rgba(255, 255, 255, 0.4), 0 0 30px rgba(255, 255, 255, 0.2); }
+    .red-flower-effect { color: #cc0000; text-shadow: 0 0 25px rgba(204, 0, 0, 0.7); font-weight: 900; }
+
+    /* 2. 卡牌樣式 (保持原樣) */
+    .tarot-card { 
+        position: relative; z-index: 10;
+        transition: transform 0.6s cubic-bezier(0.23, 1, 0.32, 1), background 0.3s ease, box-shadow 0.3s ease, opacity 0.8s ease, filter 0.8s ease; 
+        border-radius: 0.5rem; background: rgba(0, 0, 0, 0.29); border: 1px solid rgba(255, 255, 255, 0.1); 
+        aspect-ratio: 2 / 3.8; display: flex; flex-direction: column; justify-content: space-between; 
+        padding: 2.2rem 0.4rem; width: 100%; min-height: 200px; overflow: visible; cursor: pointer;
+    }
+    .tarot-card:hover:not(.card-vanish-effect) {
+        z-index: 500; transform: translateY(-15px); box-shadow: 0 0 25px rgba(204, 0, 0, 0.3);
+        border-color: rgba(255, 255, 255, 0.2); background: rgba(0, 0, 0, 0.5);
+    }
+    .tarot-card.card-vanish-effect {
+        opacity: 0 !important; transform: scale(0.8) translateY(40px) !important;
+        filter: blur(20px) !important; pointer-events: none !important; z-index: 0 !important;
+        transition: all 0.8s cubic-bezier(0.4, 0, 0.2, 1) !important;
+    }
+    .shape-container { transition: transform 1.2s cubic-bezier(0.34, 1.56, 0.64, 1); display: flex; align-items: center; justify-content: center; position: relative; pointer-events: none; }
+    .shape-container::after { display: none !important; }
+    .shape-container > div { transition: transform 0.6s ease; }
+    .tarot-card:hover:not(.card-vanish-effect) .shape-container { transform: rotate(360deg); }
+    .tarot-card:hover:not(.card-vanish-effect) .shape-container > div { transform: scale(1.1); }
+    .tarot-card:active:not(.card-vanish-effect) { transform: scale(0.98) translateY(-10px); }
+    @media (max-width: 640px) { .tarot-card { padding: 1.5rem 0.3rem; min-height: 180px; } }
+
+    /* 3. 核心動畫系統 (文字與圖片) */
+    /* 統一初始隱藏，防止跳動閃爍 */
+    .animate-pop, 
+    .animate-spread,
+    .animate-colorize {
+        opacity: 0; 
+        will-change: transform, opacity, filter;
+    }
+
+    /* 執行動畫：強制連動 HTML 變數 */
+    .step-content.active .animate-pop {
+        animation: fadeInPopFinal var(--dur, 4s) ease-in-out var(--delay, 0s) forwards !important;
+    }
+    .step-content.active .animate-spread {
+        animation: fadeInSpreadFinal var(--dur, 4s) ease-in-out var(--delay, 0s) forwards !important;
+    }
+    .step-content.active .animate-colorize {
+        animation: fadeInColorizeFinal var(--dur, 6s) ease-in-out var(--delay, 0s) forwards !important;
+    }
+
+    /* 動畫路徑定義 (唯一版本) */
+    @keyframes fadeInPopFinal {
+        0% { opacity: 0; transform: translateY(20px); filter: blur(10px); }
+        15% { opacity: 1; transform: translateY(0); filter: blur(0); }
+        90% { opacity: 1; transform: translateY(0); filter: blur(0); }
+        100% { opacity: 0; transform: translateY(-10px); filter: blur(5px); }
+    }
+
+    @keyframes fadeInSpreadFinal {
+        0% { opacity: 0; letter-spacing: -0.2em; filter: blur(10px); }
+        15% { opacity: 1; letter-spacing: normal; filter: blur(0); }
+        90% { opacity: 1; letter-spacing: normal; filter: blur(0); }
+        100% { opacity: 0; letter-spacing: 0.1em; filter: blur(5px); }
+    }
+
+    @keyframes fadeInColorizeFinal {
+    0% { 
+        opacity: 0; 
+        filter: brightness(0) grayscale(1) blur(10px); /* 初始：全黑、黑白、模糊 */
+        transform: scale(1); /* 固定比例，防止縮放 */
+    }
+    20% { 
+        opacity: 0.8; 
+        filter: brightness(0.9) grayscale(0) blur(0); /* 進場：變亮、彩色、清晰 */
+        transform: scale(1); 
+    }
+    85% { 
+        opacity: 0.8; 
+        filter: brightness(0.9) grayscale(0) blur(0); 
+        transform: scale(1);
+    }
+    100% { 
+        opacity: 0; 
+        filter: brightness(0.4) blur(20px); 
+        transform: scale(1); /* 消失：變暗模糊，但不縮放 */
+    }
+}
+
+    /* 4. 排版與背景 (保持原樣) */
+    .vertical-text { writing-mode: vertical-rl; text-orientation: upright; }
+    @media (max-width: 640px) { .vertical-text { writing-mode: horizontal-tb; text-orientation: mixed; } }
+    .step-content { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; opacity: 0; pointer-events: none; transition: opacity 0.8s ease-out; z-index: 50; padding: 1rem; }
+    .step-content.active { opacity: 1; transition: opacity 2.5s ease-in; }
+    .fixed-bg { position: fixed; inset: 0; background: url('https://files.catbox.moe/a0ng5j.png') center/cover no-repeat; filter: brightness(0.2) blur(10px); z-index: -3; transform: scale(1.1); }
+    .loading { position: fixed; inset: 0; background: #050505; display: flex; align-items: center; justify-content: center; z-index: 9999; transition: opacity 0.5s ease; }
+    .loading.hidden { opacity: 0; pointer-events: none; }
+    .gpu-accelerated { transform: translateZ(0); will-change: transform; }
+    ::-webkit-scrollbar { width: 8px; }
+    ::-webkit-scrollbar-thumb { background: rgba(255, 255, 255, 0.2); border-radius: 4px; }
+</style>
+</head>
+<body>
+    <!-- Loading Screen -->
+    <div id="loading-screen" class="loading" role="status" aria-live="polite">
+        <div class="text-center">
+            <div class="inline-block animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-white mb-4"></div>
+            <p class="text-white/60 text-sm tracking-widest">載入中...</p>
+        </div>
+    </div>
+
+    <!-- Background -->
+    <div class="fixed-bg" role="presentation" aria-hidden="true"></div>
+
+    <!-- Audio Control -->
+    <button 
+        id="audio-control" 
+        class="fixed top-8 right-8 z-[200] w-12 h-12 rounded-full bg-black/50 border border-white/10 flex items-center justify-center hover:bg-black/70 transition-all" 
+        onclick="toggleMute()"
+        aria-label="音訊控制"
+        aria-pressed="false">
+        <i data-lucide="volume-2" id="mute-icon" class="text-white w-5 h-5" aria-hidden="true"></i>
+        <span class="sr-only">靜音切換</span>
+    </button>
+
+    <!-- Main Interface -->
+    <div id="main-interface" class="w-full flex flex-col items-center transition-opacity duration-[2000ms] relative z-10" role="main">
+        <header class="w-full max-w-4xl pt-16 md:pt-24 pb-8 md:pb-12 px-4 md:px-8 text-center">
+            <h1 class="text-xl md:text-2xl lg:text-4xl font-serif font-bold tracking-[0.4em] text-white mb-6 md:mb-8 text-glow">
+                THE SILENT VIGIL
+            </h1>
+            <p id="progress-text" class="text-white/40 font-sc tracking-[0.5em] md:tracking-[0.8em] text-[10px] md:text-[12px] font-black uppercase" role="status" aria-live="polite">
+                。 收集残存的记忆 。
+            </p>
+        </header>
+        
+        <main class="w-full max-w-[95%] xl:max-w-7xl mx-auto px-3 md:px-6 pb-24 md:pb-48">
+            <div class="p-4 md:p-8 lg:p-16 bg-white/5 backdrop-blur-md rounded-2xl md:rounded-3xl border border-white/5">
+                <div 
+                    id="card-grid" 
+                    class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-7 gap-8 md:gap-10 lg:gap-12"
+                    role="list"
+                    aria-label="記憶卡牌集合">
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <!-- Final Story Page -->
+    <div id="final-story-page" class="hidden fixed inset-0 z-[100] transition-opacity duration-[3000ms] bg-[#050505] overflow-y-auto" role="article" aria-label="終章故事">
+        <!-- Step 1 -->
+ <div class="step-content active">
+    <div class="flex flex-col md:flex-row items-center justify-center w-full h-full gap-4 md:gap-0">
+        <div class="animate-spread" style="--delay: 1s; --dur: 6.3s;">
+            <p class="vertical-text font-sc text-white text-4xl md:text-6xl lg:text-[7rem] leading-none text-glow">秩序</p>
+        </div>
+        
+        <div class="animate-pop md:ml-12" style="--delay: 3.8s; --dur: 4.8s">
+            <p class="vertical-text font-sc text-lg md:text-1xl lg:text-1xl text-stone-400 tracking-[1em]">是你最重視的</p>
+        </div>
+    </div>
+</div>
+        
+        <!-- Step 2 -->
+        <div class="step-content">
+            <div class="flex items-center justify-center w-full h-full">
+                <div class="animate-spread" style="--delay: 1.8s; animation-duration: 3.8s;">
+                    <p class="vertical-text font-sc red-flower-effect text-1xl md:text-1xl lg:text-[6rem] leading-none tracking-[0.3em]">我遵守约定</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- Step 3 -->
+        <div class="step-content">
+            <div class="flex flex-col md:flex-row items-center justify-center w-full h-full gap-4 md:gap-8 lg:gap-20">
+                <div class="animate-pop -translate-y-6 md:-translate-y-12 lg:-translate-y-24" style="--delay: 1s; --dur: 3.5s;">
+                    <p class="vertical-text font-sc text-xl md:text-3xl lg:text-4xl text-white/40 tracking-[0.2em]">等待是一場</p>
+                </div>
+                <div class="animate-spread" style="--delay: 2.2s; --dur: 5s;">
+                    <p class="font-sc red-flower-effect text-4xl md:text-4xl lg:text-[8rem] leading-none ">缓慢的锈蝕</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- Step 4 -->
+   <div class="step-content">
+    <div class="relative w-full h-full flex items-center justify-center px-4">
+     <img 
+    class="last-moment-cg animate-colorize absolute w-[80vw] md:w-[60vw] lg:w-[45vw] max-h-[50vh] md:max-h-[60vh] h-auto object-contain" 
+    src="./assets/text/illu_ending_color_01.png" 
+    alt="記憶片段"
+    style="--delay: 1s; --dur: 7s;">
+        
+        <div class="animate-spread relative z-20" style="--delay: 3s; --dur: 4s;">
+            <p class="vertical-text font-sc red-flower-effect text-lg md:text-1xl tracking-[1.2em] md:tracking-[2em]">乌鸦对我索取绽放</p>
+        </div>
+    </div>
+</div>
+
+<div class="step-content">
+    <div class="flex flex-col items-center justify-center gap-8">
+        <img 
+    class="animate-colorize max-w-[85vw] md:max-w-[80vw] max-h-[70vh] object-contain shadow-2xl shadow-red-900/20" 
+    src="./assets/text/illu_ending_color_02.png" 
+    alt="分鏡CG"
+    style="--delay: 0s; --dur: 8s;">
+        
+        <div class="animate-pop" style="--delay: 3s; --dur: 4.5s">
+            <p class="vertical-text font-sc red-flower-effect text-xl md:text-1xl tracking-[1.6em]">所以</p>
+        </div>
+    </div>
+</div>
+        <!-- Step 5 -->
+        <div class="step-content">
+            <div class="w-full h-full flex items-center justify-center px-4">
+                <div class="flex flex-col md:flex-row flex-wrap items-center justify-center gap-4 md:gap-6 lg:gap-8 xl:gap-16 max-w-full">
+                    <div class="animate-pop" style="--delay: 1s; --dur: 1.5s">
+                        <p class="vertical-text font-sc text-4xl md:text-6xl lg:text-8xl font-black text-white/90">扳機</p>
+                    </div>
+                    <div class="animate-pop" style="--delay: 3s; --dur: 3s">
+                        <p class="font-sc text-xl md:text-2xl lg:text-4xl text-white tracking-[0.2em] whitespace-nowrap text-glow">扣下的瞬間</p>
+                    </div>
+                    <div class="animate-spread" style="--delay: 7.8s;--dur: 5s">
+                        <p class="vertical-text font-sc red-flower-effect text-5xl md:text-7xl lg:text-[9rem] leading-none">紅色的花</p>
+                    </div>
+                    <div class="animate-pop" style="--delay: 6.6s; --dur: 5s">
+                        <p class="vertical-text font-sc text-lg md:text-2xl lg:text-4xl text-white/60 tracking-[0.3em]">整座荒野瞬間開滿了</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Step 6 -->
+        <div class="step-content">
+            <img 
+                class="last-moment-cg w-full md:max-w-[85vw] max-h-[60vh] md:max-h-[75vh] object-contain shadow-[0_0_50px_rgba(204,0,0,0.2)]" 
+                src="./assets/text/illu_ending_color_03.png"
+                alt="終章畫面"
+                loading="lazy">
+        </div>
+
+        <!-- Step 7 -->
+        <div class="step-content">
+            <div class="flex flex-col md:flex-row items-center justify-center gap-4 md:gap-8">
+                <div class="animate-pop md:mr-8" style="--delay: 1s; --dur: 3s">
+                    <p class="vertical-text font-sc text-stone-500 text-base md:text-xl tracking-[0.8em] md:tracking-[1em]">恍若之間</p>
+                </div>
+                <div class="animate-spread" style="--delay: 3s;">
+                    <p class="vertical-text font-sc red-flower-effect text-2xl md:text-4xl lg:text-6xl">好像聽見他的聲音</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- Step 8 -->
+        <div class="step-content">
+            <img 
+                class="last-moment-cg max-w-[90vw] md:max-w-[80vw] max-h-[60vh] md:max-h-[70vh] object-contain" 
+                src="./assets/text/illu_ending_color_04.png"
+                alt="記憶畫面"
+                loading="lazy">
+        </div>
+
+        <!-- Step 9 -->
+        <div class="step-content">
+            <div class="flex flex-col md:flex-row items-center justify-center gap-4 md:gap-12">
+                <div class="animate-spread" style="--delay: 1.5s;">
+                    <p class="vertical-text font-sc red-flower-effect text-2xl md:text-4xl lg:text-5xl tracking-[0.3em] md:tracking-[1em]">你看到花開了嗎</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- Step 10 - End -->
+        <div class="step-content bg-black">
+            <p class="animate-pop font-sc red-flower-effect text-[10px] md:text-[12px] tracking-[1em] md:tracking-[1.5em] uppercase" style="--delay: 1s; --dur: 5s">
+                The Silent Vigil / FIN
+            </p>
+        </div>
+    </div>
+
+    <!-- Modal -->
+    <div 
+        id="modal" 
+        class="fixed inset-0 z-[150] flex items-center justify-center opacity-0 pointer-events-none" 
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="modal-title"
+        aria-describedby="modal-desc">
+        <div class="absolute inset-0 bg-black/90 backdrop-blur-xl" onclick="closeModal()" aria-label="關閉對話框"></div>
+        <div id="modal-content" class="relative w-full max-w-2xl p-8 md:p-12 text-center mx-4 md:mx-6">
+            <span id="modal-number" class="text-[#cc0000] font-serif tracking-[0.5em] text-[10px] md:text-[11px] mb-4 md:mb-6 block opacity-50"></span>
+            <h2 id="modal-title" class="text-2xl md:text-3xl lg:text-4xl font-black text-white mb-6 md:mb-8"></h2>
+            <p id="modal-desc" class="text-stone-200 text-lg md:text-xl leading-relaxed italic mb-8 md:mb-12"></p>
+            <button 
+                onclick="closeModal()" 
+                class="text-white/20 hover:text-white/60 text-[9px] md:text-[10px] tracking-[0.6em] font-serif uppercase transition-colors"
+                aria-label="關閉並溶解記憶">
+                点击溶解
+            </button>
+        </div>
+    </div>
+
+    <!-- Audio Elements -->
+    <audio id="bg-ambience" loop preload="auto" aria-label="背景環境音效">
+        <source src="./assets/audio/se/se_wood_short_02_loop.mp3" type="audio/mpeg">
+    </audio>
+    <audio id="finale-music" loop preload="auto" aria-label="終章音樂">
+        <source src="./assets/audio/bgm/bgm_memory_scene_loop.mp3" type="audio/mpeg">
+    </audio>
+    <audio id="touch-sfx" preload="auto" aria-label="觸控音效">
+        <source src="./assets/audio/se/se_wood_short_01.mp3" type="audio/mpeg">
+    </audio>
+
+    <script>
+        // ============================================
+        // 常數定義
+        // ============================================
+        
+        const CONFIG = {
+            AUDIO_VOLUME: {
+                BACKGROUND: 0.08,
+                FINALE: 0.3,
+                SFX: 0.3
+            },
+            TIMING: {
+                MODAL_FADE: 300,
+                CARD_VANISH: 800,
+                FINALE_TRANSITION: 2000,
+                STEP_TRANSITION: 1500
+            },
+           // 在 CONFIG 物件中修改這行
+// 對應 11 個步驟的停留時間 (毫秒)
+STAGE_TIMINGS: [
+   8000,  // 1. 秩序
+    6000,  // 2. 我遵守約定
+    9000,  // 3. 等待是一場銹蝕
+   9000,  // 4. 烏鴉索取綻放
+    9500,  // 5. 所以 (新增的那一頁)
+    12000, // 6. 扳機/瞬間/花開 (內容多，給長一點)
+    10000, // 7. 終章畫面 (CG)
+    8000,  // 8. 恍若之間
+    9500, // 9. 記憶畫面 (CG)
+    8000,  // 10. 你看到花開了嗎
+    8000   // 11. FIN
+]
+        };
+      
+        // ============================================
+        // 卡牌資料
+        // ============================================
+        
+        const cardsData = [
+            { 
+                id: 0, roman: "0", title: "OATH", cnTitle: "约定", 
+                desc: "只有遵守这个约定，他的呼吸才有意義。", 
+                shape: "border: 1.5px solid white; border-radius: 50%; width: 45px; height: 45px;" 
+            },
+            { 
+                id: 1, roman: "I", title: "UNIFORM", cnTitle: "制服", 
+                desc: "他每天穿戴整齊，仿佛秩序从未消失。", 
+                shape: "border: 1.5px solid white; width: 40px; height: 40px;" 
+            },
+            { 
+                id: 2, roman: "II", title: "GUARDS", cnTitle: "保安", 
+                desc: "他在这一带巡邏，維持一種美好的假象。", 
+                shape: "width: 0; height: 0; border-left: 20px solid transparent; border-right: 20px solid transparent; border-bottom: 35px solid #cc0000;" 
+            },
+            { 
+                id: 3, roman: "III", title: "PIGEON", cnTitle: "白鴿", 
+                desc: "它不懂末世，它只是饿了。", 
+                shape: "border: 1.5px solid white; border-radius: 50% 0 50% 50%; width: 45px; height: 45px;" 
+            },
+{
+    id: 4, roman: "IV", title: "CROW", cnTitle: "烏鴉",
+    desc: "它注視著崩塌的世界。",
+    shape: "border: 1.5px solid white; transform: skewX(-20deg); width: 50px; height: 32px;"
+},
+            { 
+                id: 5, roman: "V", title: "ROUTINE", cnTitle: "轮回", 
+                desc: "太陽升起，巡邏。圓形的軌跡。", 
+                shape: "border: 2px double white; border-radius: 50%; width: 50px; height: 50px;" 
+            },
+            { 
+                id: 6, roman: "VI", title: "ABSENCE", cnTitle: "缺席", 
+                desc: "椅子對面是空的。", 
+                shape: "border: 1.5px solid white; width: 35px; height: 50px;" 
+            },
+            { 
+                id: 7, roman: "VII", title: "EXODUS", cnTitle: "离去", 
+                desc: "他們決定離開，向著地平線延伸。", 
+                shape: "border-top: 1.5px solid white; border-bottom: 1.5px solid white; width: 50px; height: 18px;" 
+            },
+            { 
+                id: 8, roman: "VIII", title: "COMMUNITY", cnTitle: "社区", 
+                desc: "我會留下，在你喜愛的社區。", 
+                shape: "border-left: 1.5px solid white; border-bottom: 1.5px solid white; width: 40px; height: 40px;" 
+            },
+            { 
+                id: 9, roman: "IX", title: "SIGNAL", cnTitle: "信号", 
+                desc: "烏鴉停止了鳴叫。", 
+                shape: "border: 2px solid #cc0000; width: 35px; height: 35px; transform: rotate(45deg);" 
+            },
+            { 
+                id: 10, roman: "X", title: "GUN", cnTitle: "枪", 
+                desc: "一把黑色的幾何體。最後的鑰匙。", 
+                shape: "border: 1.5px solid #cc0000; clip-path: polygon(10% 0, 100% 0, 90% 100%, 0% 100%); width: 55px; height: 28px;" 
+            },
+            { 
+                id: 11, roman: "XI", title: "BROKEN", cnTitle: "碎裂", 
+                desc: "約定已經完成了。", 
+                shape: "border: 1px solid white; clip-path: polygon(50% 0%, 61% 35%, 98% 35%, 68% 57%, 79% 91%, 50% 70%, 21% 91%, 32% 57%, 2% 35%, 39% 35%); width: 50px; height: 50px;" 
+            },
+            { 
+                id: 12, roman: "XII", title: "END", cnTitle: "结局", 
+                desc: "一聲巨響劃破了死寂。", 
+                shape: "border: 1.5px dashed #cc0000; border-radius: 50%; width: 55px; height: 55px;" 
+            },
+            { 
+                id: 13, roman: "XIII", title: "SILENCE", cnTitle: "静默", 
+                desc: "你聽見花開的聲音了嗎？", 
+                shape: "border-bottom: 1.5px solid white; width: 70px; height: 1px;" 
+            }
+        ];
+
+        // ============================================
+        // 狀態管理
+        // ============================================
+        
+        let visitedCards = new Set();
+        let lastId = null;
+        let isMuted = false;
+        let currentAudio = null;
+        let currentStep = 0;
+        let isTransitioning = false;
+        let isInitialized = false;
+
+        // ============================================
+        // 初始化函數
+        // ============================================
+        
+        function init() {
+            if (isInitialized) return;
+            isInitialized = true;
+
+            try {
+                // 初始化音訊
+                currentAudio = document.getElementById('bg-ambience');
+                currentAudio.volume = 0;
+
+                // 生成卡牌
+                generateCards();
+
+                // 初始化圖示
+                if (typeof lucide !== 'undefined') {
+                    lucide.createIcons();
+                }
+
+                // 隱藏載入畫面
+                setTimeout(() => {
+                    const loadingScreen = document.getElementById('loading-screen');
+                    if (loadingScreen) {
+                        loadingScreen.classList.add('hidden');
+                    }
+                }, 500);
+
+                console.log('✓ 應用程式初始化完成');
+            } catch (error) {
+                console.error('初始化失敗:', error);
+                alert('載入失敗，請重新整理頁面');
+            }
+        }
+
+        // ============================================
+        // 卡牌生成
+        // ============================================
+        
+        function generateCards() {
+            const grid = document.getElementById('card-grid');
+            if (!grid) return;
+
+            cardsData.forEach((card, index) => {
+                const wrap = document.createElement('div');
+                wrap.id = `card-wrap-${card.id}`;
+                wrap.className = 'opacity-0 animate-fade-in-up';
+                wrap.style.animationDelay = `${index * 0.05}s`;
+                wrap.setAttribute('role', 'listitem');
+                
+                wrap.innerHTML = `
+                    <div 
+                        class="tarot-card cursor-pointer group gpu-accelerated" 
+                        onclick="openModal(${card.id})"
+                        role="button"
+                        tabindex="0"
+                        aria-label="${card.cnTitle} - ${card.desc}"
+                        onkeydown="if(event.key==='Enter'||event.key===' ')openModal(${card.id})">
+                        <span class="font-serif text-white/20 text-[9px] md:text-[10px] tracking-[0.4em] text-center w-full block" aria-hidden="true">
+                            ${card.roman}
+                        </span>
+                        <div class="flex justify-center items-center flex-grow">
+                            <div class="shape-container">
+                                <div style="${card.shape || ''}" aria-hidden="true"></div>
+                            </div>
+                        </div>
+                        <div class="text-center px-1">
+                            <h3 class="font-serif text-white/30 uppercase text-[8px] md:text-[9px] tracking-widest" aria-hidden="true">
+                                ${card.title}
+                            </h3>
+                            <h2 class="font-sc text-[16px] md:text-[18px] text-white tracking-[0.2em] font-black">
+                                ${card.cnTitle}
+                            </h2>
+                        </div>
+                    </div>
+                `;
+                grid.appendChild(wrap);
+            });
+        }
+
+        // ============================================
+        // 模態視窗控制
+        // ============================================
+        
+        function openModal(id) {
+            try {
+                lastId = id;
+                const card = cardsData.find(c => c.id === id);
+                if (!card) return;
+
+                // 更新模態內容
+                document.getElementById('modal-number').innerText = `${card.roman} / MEMORY FRAGMENT`;
+                document.getElementById('modal-title').innerText = card.title;
+                document.getElementById('modal-desc').innerText = card.desc;
+
+                // 顯示模態
+                const modal = document.getElementById('modal');
+                modal.classList.remove('pointer-events-none');
+                modal.style.opacity = '1';
+
+                // 播放音效
+                if (!isMuted) {
+                    const sfx = document.getElementById('touch-sfx');
+                    if (sfx) {
+                        sfx.volume = CONFIG.AUDIO_VOLUME.SFX;
+                        sfx.currentTime = 0;
+                        sfx.play().catch(err => console.log('音效播放失敗:', err));
+                    }
+                }
+
+                // 更新狀態
+                visitedCards.add(id);
+                updateProgress();
+            } catch (error) {
+                console.error('開啟模態視窗失敗:', error);
+            }
+        }
+
+ function closeModal() {
+    try {
+        const modal = document.getElementById('modal');
+        modal.style.opacity = '0';
+        
+        setTimeout(() => {
+            modal.classList.add('pointer-events-none');
+        }, CONFIG.TIMING.MODAL_FADE);
+
+        // --- 修正部分開始 ---
+        if (lastId !== null) {
+            // 找到該卡牌外層的 wrap
+            const cardWrap = document.getElementById(`card-wrap-${lastId}`);
+            if (cardWrap) {
+                // 找到真正的卡牌本體
+                const actualCard = cardWrap.querySelector('.tarot-card');
+                if (actualCard) {
+                    actualCard.classList.add('card-vanish-effect');
+                }
+            }
+        }
+        // --- 修正部分結束 ---
+
+        // 檢查是否完成
+        if (visitedCards.size === cardsData.length) {
+            setTimeout(() => {
+                triggerFinale();
+            }, CONFIG.TIMING.CARD_VANISH);
+        }
+    } catch (error) {
+        console.error('關閉模態視窗失敗:', error);
+    }
+}
+
+        // ============================================
+        // 進度更新
+        // ============================================
+        
+        function updateProgress() {
+            const remaining = cardsData.length - visitedCards.size;
+            const progressText = document.getElementById('progress-text');
+            if (progressText) {
+                progressText.innerText = `。 剩余碎片：${remaining} 。`;
+            }
+        }
+
+        // ============================================
+        // 終章觸發
+        // ============================================
+        
+function triggerFinale() {
+    try {
+        const mainUi = document.getElementById('main-interface');
+        const bgAmbience = document.getElementById('bg-ambience');
+        const touchSfx = document.getElementById('touch-sfx');
+        const finaleMusic = document.getElementById('finale-music');
+
+        // 【重點 1】點擊瞬間解鎖音軌
+        if (finaleMusic) {
+            finaleMusic.muted = true;
+            finaleMusic.play().then(() => {
+                finaleMusic.pause();
+                finaleMusic.muted = false;
+            }).catch(e => console.log("Unlock failed"));
+        }
+
+        // 【重點 2】徹底切斷舊音軌，解決雜音
+        if (bgAmbience) {
+            bgAmbience.pause();
+            bgAmbience.src = ""; // 切斷串流
+            bgAmbience.load();
+        }
+        // 同時讓全域變數失效，防止 click 事件重啟它
+        currentAudio = null; 
+
+        if (touchSfx) {
+            touchSfx.pause();
+            touchSfx.muted = true;
+        }
+
+        if (mainUi) mainUi.style.opacity = '0';
+
+        setTimeout(() => {
+            if (mainUi) mainUi.style.display = 'none';
+            const finalPage = document.getElementById('final-story-page');
+            if (finalPage) finalPage.classList.remove('hidden');
+
+            setTimeout(() => {
+                if (finaleMusic) {
+                    window.currentAudio = finaleMusic; // 重新接管控制權
+                    finaleMusic.volume = 0.3;
+                    finaleMusic.play();
+                }
+                if (typeof startAutoPlay === 'function') startAutoPlay();
+            }, 500); // 縮短延遲以符合手機政策
+        }, 1500);
+    } catch (error) {
+        console.error('觸發終章失敗:', error);
+    }
+}
+        // ============================================
+        // 自動播放控制
+        // ============================================
+        
+ function startAutoPlay() {
+            let stepIndex = 0;
+            
+            function runNext() {
+                if (stepIndex < CONFIG.STAGE_TIMINGS.length - 1) {
+                    setTimeout(() => {
+                        advanceFinale();
+                        stepIndex++;
+                        runNext();
+                    }, CONFIG.STAGE_TIMINGS[stepIndex]);
+                } else {
+                    setTimeout(() => {
+                        // 故事結束，不跳出提示框。
+                        // 如果想讓它自動重新開始，取消下面這行的註解：
+                        // location.reload();
+                        console.log("Story ended.");
+                    }, CONFIG.STAGE_TIMINGS[stepIndex]);
+                }
+            }
+            
+            runNext();
+        }
+
+        // ============================================
+        // 故事推進
+        // ============================================
+        
+        function advanceFinale() {
+            if (isTransitioning) return;
+            
+            try {
+                const steps = document.querySelectorAll('.step-content');
+                const fixedBg = document.querySelector('.fixed-bg');
+                
+                if (!steps.length || currentStep >= steps.length) return;
+                
+                isTransitioning = true;
+
+                // 淡出當前段落
+                steps[currentStep].classList.remove('active');
+                
+                // 過渡延遲
+                setTimeout(() => {
+                    currentStep++;
+                    if (currentStep >= steps.length) {
+                        isTransitioning = false;
+                        return;
+                    }
+
+                    const nextStep = steps[currentStep];
+                    
+                    // 處理背景圖片
+                    const stepImg = nextStep.querySelector('img');
+                    if (stepImg && fixedBg) {
+                        fixedBg.style.backgroundImage = `url('${stepImg.src}')`;
+                        fixedBg.style.filter = "brightness(0.15) blur(35px)";
+                    } else if (fixedBg) {
+                        fixedBg.style.filter = "brightness(0.12) blur(40px)";
+                    }
+
+                    // 顯示下一段落
+                    nextStep.classList.add('active');
+                    
+                    setTimeout(() => {
+                        isTransitioning = false;
+                    }, 2000);
+                }, CONFIG.TIMING.STEP_TRANSITION);
+            } catch (error) {
+                console.error('故事推進失敗:', error);
+                isTransitioning = false;
+            }
+        }
+
+        // ============================================
+        // 音訊控制
+        // ============================================
+        
+        function toggleMute() {
+            try {
+                isMuted = !isMuted;
+                
+                // 更新所有音訊元素
+                if (currentAudio) {
+                    currentAudio.muted = isMuted;
+                }
+                
+                const touchSfx = document.getElementById('touch-sfx');
+                if (touchSfx) {
+                    touchSfx.muted = isMuted;
+                }
+
+                // 更新按鈕狀態
+                const audioBtn = document.getElementById('audio-control');
+                if (audioBtn) {
+                    audioBtn.setAttribute('aria-pressed', isMuted ? 'true' : 'false');
+                }
+
+                // 更新圖示
+                const muteIcon = document.getElementById('mute-icon');
+                if (muteIcon) {
+                    muteIcon.setAttribute('data-lucide', isMuted ? 'volume-x' : 'volume-2');
+                    if (typeof lucide !== 'undefined') {
+                        lucide.createIcons();
+                    }
+                }
+            } catch (error) {
+                console.error('切換靜音失敗:', error);
+            }
+        }
+
+        function fadeOutAudio(audio, duration) {
+            if (!audio) return;
+            
+            const startVolume = audio.volume;
+            const step = startVolume / (duration / 50);
+            
+            const fadeInterval = setInterval(() => {
+                if (audio.volume > step) {
+                    audio.volume -= step;
+                } else {
+                    audio.volume = 0;
+                    audio.pause();
+                    clearInterval(fadeInterval);
+                }
+            }, 50);
+        }
+
+        // ============================================
+        // 點擊效果
+        // ============================================
+        
+     window.addEventListener('click', (e) => {
+    try {
+        // ... 原有的效果代碼 ...
+        const effect = document.createElement('div');
+        // ... (保持你原本創建 effect 的內容) ...
+
+        // 【重點 3】修正啟動邏輯：只有在 currentAudio 存在且是環境音時才啟動
+        // 這樣進入結局後（currentAudio 已被設為 null 或 finaleMusic），就不會重啟風聲
+        if (currentAudio && currentAudio.id === 'bg-ambience' && currentAudio.paused) {
+            currentAudio.volume = CONFIG.AUDIO_VOLUME.BACKGROUND;
+            currentAudio.play().catch(err => console.log('音訊播放失敗:', err));
+        }
+    } catch (error) {
+        console.error('點擊效果失敗:', error);
+    }
+});
+
+        // ============================================
+        // 錯誤處理
+        // ============================================
+        
+        window.addEventListener('error', (e) => {
+            console.error('全域錯誤:', e.error);
+        });
+
+        window.addEventListener('unhandledrejection', (e) => {
+            console.error('未處理的 Promise 拒絕:', e.reason);
+        });
+
+        // ============================================
+        // 頁面載入完成後初始化
+        // ============================================
+        
+        if (document.readyState === 'loading') {
+            document.addEventListener('DOMContentLoaded', init);
+        } else {
+            init();
+        }
+
+        // 防止右鍵選單 (可選)
+        document.addEventListener('contextmenu', (e) => {
+          
+            if (e.target.tagName !== 'INPUT' && e.target.tagName !== 'TEXTAREA') {
+                e.preventDefault();
+            }
+        });
+
+        console.log('🌙 THE SILENT VIGIL - 程式碼已載入');
+    </script>
+</body>
+</html>
